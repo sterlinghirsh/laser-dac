@@ -297,6 +297,62 @@ export class Helios extends Device {
     this.stats.allFrames.maxAccel = Math.max(this.stats.allFrames.maxAccel, maxAccel);
   }
 
+  streamDynamic(scene: Scene): void {
+    const fps = this.pointsRate / MAX_POINTS;
+    const frameTime = this.stats.fixedFrameRate.allottedFrameMs = Math.round(1000 / fps);
+    const allottedFramePoints = this.stats.fixedFrameRate.allottedFramePoints = Math.round(this.pointsRate / fps);
+
+    console.log(`Streaming at ${this.pointsRate} pps, ${fps} fps`);
+    console.log(`${frameTime}ms per frame, ${allottedFramePoints} points per frame`);
+
+    this.stats.fixedFrameRate.fps = fps;
+    this.stats.fixedFrameRate.frameAllotmentPercentOfDeviceLimit =
+     100 * allottedFramePoints / MAX_POINTS;
+    this.stats.startTime = Date.now();
+
+    const streamSingle = () => {
+      const funcStart = Date.now();
+      const points = scene.getPoints(MAX_POINTS);
+      const maxTries = 100;
+      let notReadyRetries = 0;
+      let result;
+
+      do {
+        result = this.sendFrame(points, this.pointsRate);
+      } while (result == FrameResult.NotReady && ++notReadyRetries < maxTries);
+
+      if (notReadyRetries > 0) {
+        console.error(`Helios retried ${notReadyRetries} times, refreshing interval.`);
+      }
+
+      this.stats.lastFrame.points = points.length;
+      this.stats.lastFrame.result = result;
+      this.stats.lastFrame.drawMs = 1000 * points.length / this.pointsRate;
+      this.stats.points[result] += points.length;
+      ++this.stats.frames[result];
+
+      this.recordContentStats(points);
+
+      switch (result) {
+        case FrameResult.Fail:
+          console.error("Helios failed sending a frame");
+          break;
+        case FrameResult.NotReady:
+          console.error("Helios not ready.");
+          break;
+      }
+
+      const retryTime = 10; // ms
+      const retryAdjustment = notReadyRetries * retryTime;
+      const funcDuration = Date.now() - funcStart;
+      const remainingFrameTime = frameTime - funcDuration;
+      const adjustedRemainingFrameTime = remainingFrameTime + retryAdjustment;
+      console.log(frameTime, funcDuration, remainingFrameTime, retryAdjustment, adjustedRemainingFrameTime);
+      this.interval = setTimeout(streamSingle, adjustedRemainingFrameTime);
+    };
+    this.interval = setTimeout(streamSingle, 0);
+  }
+
   getStats(): Object {
     return {
       calculated: this.calculateStats(),
