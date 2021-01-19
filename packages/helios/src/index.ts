@@ -298,6 +298,7 @@ export class Helios extends Device {
   }
 
   streamDynamic(scene: Scene): void {
+    this.setPointsRate(scene.options.pointsRate);
     const fps = this.pointsRate / MAX_POINTS;
     const frameTime = this.stats.fixedFrameRate.allottedFrameMs = Math.round(1000 / fps);
     const allottedFramePoints = this.stats.fixedFrameRate.allottedFramePoints = Math.round(this.pointsRate / fps);
@@ -347,7 +348,7 @@ export class Helios extends Device {
       const funcDuration = Date.now() - funcStart;
       const remainingFrameTime = frameTime - funcDuration;
       const adjustedRemainingFrameTime = remainingFrameTime + retryAdjustment;
-      console.log(frameTime, funcDuration, remainingFrameTime, retryAdjustment, adjustedRemainingFrameTime);
+      //console.log(frameTime, funcDuration, remainingFrameTime, retryAdjustment, adjustedRemainingFrameTime);
       this.interval = setTimeout(streamSingle, adjustedRemainingFrameTime);
     };
     this.interval = setTimeout(streamSingle, 0);

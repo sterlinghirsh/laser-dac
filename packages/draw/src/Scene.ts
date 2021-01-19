@@ -10,6 +10,7 @@ export interface SceneOptions {
   blankingPoints: number;
   // This value determines how many times a Wait-point should be applied for the sharpest possible angles (360 degree angles).
   maxWaitPoints: number;
+  pointsRate: number;
 }
 
 const defaultOptions: SceneOptions = {
@@ -17,6 +18,7 @@ const defaultOptions: SceneOptions = {
   fps: 30,
   blankingPoints: 24,
   maxWaitPoints: 10,
+  pointsRate: 30000,
 };
 
 type TransformFn = (points: Point[]) => Point[];
@@ -71,5 +73,35 @@ export class Scene {
     const chunk = this.points.slice(0, numPoints);
     this.points = this.points.slice(numPoints);
     return chunk;
+  }
+}
+
+type UpdateFn = (scene: DynamicScene) => void;
+
+export class DynamicScene extends Scene {
+  curTime = 0;
+  timeStep = 0;
+  updateScene: UpdateFn;
+
+  constructor(updateScene: UpdateFn, options: Partial<SceneOptions> = {}) {
+    super(options);
+    this.updateScene = updateScene;
+  }
+
+  getPoints(numPoints: number): Point[] {
+    this.preparePoints(numPoints);
+    return super.getPoints(numPoints);
+  }
+
+  preparePoints(numPoints: number): void {
+    //console.log(`Preparing, starting with ${this.points.length} points`);
+    while (this.points.length < numPoints) {
+      const numPointsPre = this.points.length;
+      this.updateScene(this);
+      const addedPoints = this.points.length - numPointsPre;
+      //console.log(`Added ${addedPoints} points`);
+      this.timeStep = addedPoints / this.options.pointsRate;
+      this.curTime += this.timeStep;
+    }
   }
 }

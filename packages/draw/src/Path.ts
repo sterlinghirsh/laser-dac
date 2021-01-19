@@ -99,6 +99,7 @@ export class Path extends Shape {
     // use the value from SceneOptions at render time. The same goes
     // for waitAmount.
     const blankingAmount = this.blankingAmount ?? options.blankingPoints;
+    const waitAmount = this.waitAmount ?? options.maxWaitPoints;
 
     const points = pathData.commands.reduce(
       (accumulator: Point[], command: SVGCommand) => {
@@ -254,7 +255,7 @@ export class Path extends Shape {
             x: lastPoint.x,
             y: lastPoint.y,
             color: [lastPoint.r, lastPoint.g, lastPoint.b],
-            amount: Math.floor(this.waitAmount * relativeAngle)
+            amount: Math.floor(waitAmount * relativeAngle)
           });
           wait = waitShape.draw();
         }

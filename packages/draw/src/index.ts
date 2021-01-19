@@ -1,4 +1,4 @@
-export { Scene } from './Scene';
+export { Scene, DynamicScene } from './Scene';
 export { Line } from './Line';
 export { Rect } from './Rect';
 export { Circle } from './Circle';
