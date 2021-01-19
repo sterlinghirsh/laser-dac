@@ -1,6 +1,7 @@
 import { Device, Point } from '@laser-dac/core';
 import * as heliosLib from './HeliosLib';
 import { relativeToX, relativeToY, relativeToColor } from './convert';
+import { Scene } from '@laser-dac/draw';
 
 enum FrameResult {
   Success = 'Success',
@@ -13,18 +14,38 @@ enum FrameResult {
 // For many laser projectors this won't make a difference, but some projectors map this to the shutter so the laser won't turn on if we don't pass the max value.
 const INTENSITY = 255;
 const MAX_POINTS = 4094;
+const MIN_PPS = 7;
+const MAX_PPS = 65535;
 
 export class Helios extends Device {
   private interval?: NodeJS.Timeout;
-  private statsInterval?: NodeJS.Timeout;
   private dacNum: number = 0;
+  private sendNextImmediate: boolean = false;
+  private lastPoint?: Point;
+  /*
+  We could initialize lastPoint to the center to capture the initial startup jump
+  but it doesn't seem that useful.
+  {
+    x: 0.5,
+    y: 0.5,
+    r: 0,
+    g: 0,
+    b: 0,
+  };
+   */
 
   private stats = {
     startTime: 0,
-    expectedFrameMs: 0,
-    maxFramePoints: 0,
-    pps: 0,
-    fps: 0,
+    secondsPerPoint: 0,
+    msPerPoint: 0,
+    microsecondsPerPoint: 0,
+    maxTheoreticalAccel: 0,
+    fixedFrameRate: {
+      fps: 0,
+      allottedFrameMs: 0,
+      allottedFramePoints: 0,
+      frameAllotmentPercentOfDeviceLimit: 0,
+    },
     points: {
       [FrameResult.Success]: 0,
       [FrameResult.NotReady]: 0,
@@ -37,6 +58,23 @@ export class Helios extends Device {
       [FrameResult.Fail]: 0,
       [FrameResult.Empty]: 0,
     },
+    lastFrame: {
+      points: 0,
+      result: FrameResult.Empty,
+      drawMs: 0,
+      maxJumpX: 0,
+      maxJumpY: 0,
+      maxJump: 0,
+      maxSpeed: 0,
+      maxAccel: 0,
+    },
+    allFrames: {
+      maxJumpX: 0,
+      maxJumpY: 0,
+      maxJump: 0,
+      maxSpeed: 0,
+      maxAccel: 0,
+    }
   };
 
   async start() {
@@ -55,9 +93,6 @@ export class Helios extends Device {
     if (this.interval) {
       clearInterval(this.interval);
     }
-    if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-    }
   }
 
   onShutdownSync() {
@@ -75,45 +110,88 @@ export class Helios extends Device {
     };
   }
 
+  setPointsRate(pointsRate: number) {
+    // TODO: Make this throw?
+    if (pointsRate > MAX_PPS) {
+      console.error(`Helios cannot exceed ${MAX_PPS} pps (${pointsRate} requested)`);
+      return;
+    } else if (pointsRate < MIN_PPS) {
+      console.error(`Helios cannot subsceed ${MIN_PPS} pps (${pointsRate} requested)`);
+      return;
+    }
+
+    super.setPointsRate(pointsRate);
+    this.sendNextImmediate = true;
+    this.stats.secondsPerPoint = 1 / pointsRate;
+    this.stats.msPerPoint = 1000 / pointsRate;
+    this.stats.microsecondsPerPoint = 1000000 / pointsRate;
+
+    // Going from 0 to 1 in a single point means a velocity of 1 Screen Unit (SU)
+    // in secondsPerPoint amount of time. secondsPerPoint is  1 / pointsRate seconds,
+    // so 1 / (1 / pointsRate) is just pointsRate pointsRate SU/s.
+    //
+    // Max acceleration would be going across the screen from 0 to 1 in a
+    // single point and then back to 0 on the next point. That's a change in
+    // velocity of 2 * pointsRate SU/s in one secondsPerPoint
+    // amount of time, measured in SU/s/s.
+    //
+    // But SU/s/s isn't that useful of a measurement since that acceleration only
+    // applies for the duration of a single point, which is usually in microseconds (us).
+    // So let's keep the speed in SU/s but make acceleration in SU/s/us
+    this.stats.maxTheoreticalAccel = 2 * pointsRate / this.stats.microsecondsPerPoint;
+  }
+
   sendFrame(points: Point[], pointsRate: number): FrameResult {
     if (!points.length) {
       return FrameResult.Empty;
     }
 
-    if (heliosLib.getStatus(this.dacNum) !== 1) {
+    if (!this.sendNextImmediate && heliosLib.getStatus(this.dacNum) !== 1) {
       return FrameResult.NotReady;
     }
+
+    const frameMode = this.sendNextImmediate
+      ? heliosLib.FrameMode.ImmediateSingle
+      : heliosLib.FrameMode.QueueSingle;
+
+    this.sendNextImmediate = false;
 
     const limitedPoints = points.length > MAX_POINTS ? points.slice(0, MAX_POINTS) : points;
     const converted = limitedPoints.map(this.convertPoint);
     const success = heliosLib.writeFrame(this.dacNum, pointsRate,
-     heliosLib.FrameMode.QueueLoop, converted, converted.length);
+     frameMode, converted, converted.length);
 
     return success === 1 ? FrameResult.Success : FrameResult.Fail;
   }
 
   stream(
-    scene: { points: Point[] },
+    scene: Scene,
     pointsRate: number,
     fps: number
   ) {
-    const frameTime = this.stats.expectedFrameMs = Math.round(1000 / fps);
-    this.stats.maxFramePoints = Math.round(pointsRate / fps);
+    this.setPointsRate(pointsRate);
+    const frameTime = this.stats.fixedFrameRate.allottedFrameMs = Math.round(1000 / fps);
+    const allottedFramePoints = this.stats.fixedFrameRate.allottedFramePoints = Math.round(pointsRate / fps);
+
     console.log(`Streaming at ${pointsRate} pps, ${fps} fps`);
-    console.log(`${frameTime}ms per frame, ${this.stats.maxFramePoints} points per frame`);
+    console.log(`${frameTime}ms per frame, ${allottedFramePoints} points per frame`);
 
-    this.stats.fps = fps;
-    this.stats.pps = pointsRate;
+    this.stats.fixedFrameRate.fps = fps;
+    this.stats.fixedFrameRate.frameAllotmentPercentOfDeviceLimit =
+     100 * allottedFramePoints / MAX_POINTS;
     this.stats.startTime = Date.now();
-
-    this.statsInterval = setInterval(() => { this.printStats(); }, 2000);
 
     this.interval = setInterval(() => {
       const points = scene.points;
-      const result = this.sendFrame(points, pointsRate);
+      const result = this.sendFrame(points, this.pointsRate);
 
+      this.stats.lastFrame.points = points.length;
+      this.stats.lastFrame.result = result;
+      this.stats.lastFrame.drawMs = 1000 * points.length / this.pointsRate;
       this.stats.points[result] += points.length;
       ++this.stats.frames[result];
+
+      this.recordContentStats(points);
 
       switch (result) {
         case FrameResult.Fail:
@@ -134,44 +212,95 @@ export class Helios extends Device {
       this.stats.points[FrameResult.Fail];
 
     const attemptedPps = Math.round(attemptedPoints / duration);
-    const successPpsRatio = successPps / this.stats.pps;
-    const attemptedPpsRatio = attemptedPps / this.stats.pps;
+    const successPpsPercentOfNominal = 100 * successPps / this.pointsRate;
+    const attemptedPpsPercentOfNominal = 100 * attemptedPps / this.pointsRate;
 
     const avgFramePoints = Math.round(this.stats.points[FrameResult.Success] /
       this.stats.frames[FrameResult.Success]);
 
-    const avgNominalFrameMs = Math.round(1000 * avgFramePoints / this.stats.pps);
+    const avgFrameDisplayMs = Math.round(1000 * avgFramePoints / this.pointsRate);
+    const avgFrameAllotmentUtilization = 100 * avgFramePoints / this.stats.fixedFrameRate.allottedFramePoints;
+    const avgFrameDeviceLimitUtilization = 100 * avgFramePoints / MAX_POINTS;
 
     const totalFrames = this.stats.frames[FrameResult.Success] +
       this.stats.frames[FrameResult.NotReady] +
       this.stats.frames[FrameResult.Fail] +
       this.stats.frames[FrameResult.Empty];
 
-    const notReadyRatio = this.stats.frames[FrameResult.NotReady] / totalFrames;
+    const notReadyFramePercent = 100 * this.stats.frames[FrameResult.NotReady] / totalFrames;
 
     return {
       duration,
       successPps,
       attemptedPps,
-      successPpsRatio,
-      attemptedPpsRatio,
+      successPpsPercentOfNominal,
+      attemptedPpsPercentOfNominal,
       avgFramePoints,
-      avgNominalFrameMs,
-      notReadyRatio,
+      avgFrameDisplayMs,
+      avgFrameAllotmentUtilization,
+      avgFrameDeviceLimitUtilization,
+      notReadyFramePercent,
     }
   }
 
-  private printStats() {
-    const calc = this.calculateStats();
-    const duration = Math.round(calc.duration);
-    const successPercent = Math.round(100 * calc.successPpsRatio);
-    const attemptedPercent = Math.round(100 * calc.attemptedPpsRatio);
-    const notReadyPercent = Math.round(100 * calc.notReadyRatio);
+  recordContentStats(framePoints: Point[]) {
+    let maxJumpX = 0;
+    let maxJumpY = 0;
+    let maxJump = 0;
+    let maxSpeed = 0;
+    let maxAccel = 0;
 
-    console.log(`${duration} ` +
-      `Success: ${calc.successPps} pps (${successPercent}% max), ` +
-      `Attempted: ${calc.attemptedPps} pps (${attemptedPercent}% max), ` +
-      `Avg ${calc.avgFramePoints}p (${calc.avgNominalFrameMs}ms) per frame, ` +
-      `Unready Frames: ${notReadyPercent}%`);
+    let lastJumpX = 0;
+    let lastJumpY = 0;
+
+    framePoints.forEach((point: Point) => {
+      const lastPoint = this.lastPoint ?? point;
+      const jumpX = point.x - lastPoint.x;
+      const jumpXAbs = Math.abs(jumpX);
+
+      const jumpY = point.y - lastPoint.y;
+      const jumpYAbs = Math.abs(jumpY);
+
+      const largerJump = Math.max(jumpXAbs, jumpYAbs);
+
+      const largerSpeed = largerJump / this.stats.secondsPerPoint;
+
+      const jumpDiffX = Math.abs(jumpX - lastJumpX);
+      const jumpDiffY = Math.abs(jumpY - lastJumpY);
+      const largerJumpDiff = Math.max(jumpDiffX, jumpDiffY);
+
+      // Acceleration is mearued here in Screen Units per second per microsecond (SU/s/us).
+      const speedChange = largerJumpDiff / this.stats.secondsPerPoint;
+      const accel = speedChange / this.stats.microsecondsPerPoint;
+
+      maxJumpX = Math.max(maxJumpX, jumpXAbs);
+      maxJumpY = Math.max(maxJumpY, jumpYAbs);
+      maxJump = Math.max(maxJump, largerJump);
+      maxSpeed = Math.max(maxSpeed, largerSpeed);
+      maxAccel = Math.max(maxAccel, accel);
+
+      lastJumpX = jumpX;
+      lastJumpY = jumpY;
+      this.lastPoint = point;
+    });
+
+    this.stats.lastFrame.maxJumpX = maxJumpX;
+    this.stats.lastFrame.maxJumpY = maxJumpY;
+    this.stats.lastFrame.maxJump = maxJump;
+    this.stats.lastFrame.maxSpeed = maxSpeed;
+    this.stats.lastFrame.maxAccel = maxAccel;
+
+    this.stats.allFrames.maxJumpX = Math.max(this.stats.allFrames.maxJumpX, maxJumpX);
+    this.stats.allFrames.maxJumpY = Math.max(this.stats.allFrames.maxJumpY, maxJumpY);
+    this.stats.allFrames.maxJump = Math.max(this.stats.allFrames.maxJump, maxJump);
+    this.stats.allFrames.maxSpeed = Math.max(this.stats.allFrames.maxSpeed, maxSpeed);
+    this.stats.allFrames.maxAccel = Math.max(this.stats.allFrames.maxAccel, maxAccel);
+  }
+
+  getStats(): Object {
+    return {
+      calculated: this.calculateStats(),
+      ...this.stats
+    };
   }
 }
