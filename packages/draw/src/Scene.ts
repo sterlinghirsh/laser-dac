@@ -66,4 +66,10 @@ export class Scene {
   setOptions(options: Partial<SceneOptions>) {
     this.options = Object.assign(this.options, options);
   }
+
+  getPoints(numPoints: number): Point[] {
+    const chunk = this.points.slice(0, numPoints);
+    this.points = this.points.slice(numPoints);
+    return chunk;
+  }
 }

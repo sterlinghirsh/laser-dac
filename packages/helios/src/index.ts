@@ -182,7 +182,7 @@ export class Helios extends Device {
     this.stats.startTime = Date.now();
 
     this.interval = setInterval(() => {
-      const points = scene.points;
+      const points = scene.getPoints(MAX_POINTS);
       const result = this.sendFrame(points, this.pointsRate);
 
       this.stats.lastFrame.points = points.length;
