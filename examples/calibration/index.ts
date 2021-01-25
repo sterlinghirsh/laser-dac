@@ -15,7 +15,7 @@ const wss = new WebSocketServer({ server });
 
 server.on('request', app);
 server.listen(PORT, function() {
-  console.log(`Started Square Interactive demo on http://localhost:${PORT}`);
+  console.log(`Started Calibration Interface on http://localhost:${PORT}`);
 });
 
 wss.on('connection', function connection(ws, req) {

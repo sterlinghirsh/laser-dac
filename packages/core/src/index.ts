@@ -21,9 +21,16 @@ export abstract class Device {
   abstract start(): Promise<boolean>;
   abstract stop(): void;
   abstract stream(scene: Scene, pointsRate: number, fps: number): void;
+
+  streamDynamic(scene: Scene): void {
+    // Devices that haven't been adapted to support dynamic streaming will
+    // just do a 30fps static stream for now.
+    this.stream(scene, this.pointsRate, 30);
+  }
+
   // This is for any last-minute synchronous cleanup so the laser doesn't
   // stay on after the program stops.
-  onShutdownSync(): void {};
+  onShutdownSync(): void {}
 
   isSupported(): boolean {
     return true;
@@ -84,6 +91,12 @@ export class DAC {
   stream(scene: Scene, pointsRate = DEFAULT_POINTS_RATE, fps = DEFAULT_FPS) {
     for (const device of this.devices) {
       device.stream(scene, pointsRate, fps);
+    }
+  }
+
+  streamDynamic(scene: Scene) {
+    for (const device of this.devices) {
+      device.streamDynamic(scene);
     }
   }
 
