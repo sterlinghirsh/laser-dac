@@ -46,7 +46,7 @@ export class Rect extends Shape {
         y: this.y,
         color: this.color,
         amount: waitAmount
-      }).draw(),
+      }).draw(options),
 
       // Right.
       ...new Line({
@@ -60,7 +60,7 @@ export class Rect extends Shape {
         y: this.y + this.height,
         color: this.color,
         amount: waitAmount
-      }).draw(),
+      }).draw(options),
 
       // Bottom.
       ...new Line({
@@ -74,7 +74,7 @@ export class Rect extends Shape {
         y: this.y + this.height,
         color: this.color,
         amount: waitAmount
-      }).draw(),
+      }).draw(options),
 
       // Left.
       ...new Line({

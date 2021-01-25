@@ -56,9 +56,8 @@ export class Line extends Shape {
       points = new Wait({
         x: this.from.x,
         y: this.from.y,
-        color: [0, 0, 0],
         amount: blankingAmount
-      }).draw();
+      }).draw(options);
     }
 
     for (let stepNumber = 1; stepNumber <= steps; stepNumber++) {
@@ -80,7 +79,7 @@ export class Line extends Shape {
           y: this.to.y,
           color: this.color,
           amount: waitAmount / 2
-        }).draw()
+        }).draw(options)
       ];
     }
 

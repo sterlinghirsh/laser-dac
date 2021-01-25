@@ -32,10 +32,8 @@ export class Circle extends Shape {
 
     const points: Point[] = new Wait({
       x: this.x + this.radius,
-      y: this.y,
-      color: [0, 0, 0],
-      amount: options.blankingPoints
-    }).draw();
+      y: this.y
+    }).draw(options);
 
     // If there are less then 3 points just return blank
     if (pointCount < 3) {
@@ -61,9 +59,7 @@ export class Circle extends Shape {
       new Wait({
         x: this.x + this.radius,
         y: this.y,
-        color: [0, 0, 0],
-        amount: options.blankingPoints
-      }).draw()
+      }).draw(options)
     );
   }
 }

@@ -111,7 +111,7 @@ export class Path extends Shape {
               x: command.x,
               y: command.y,
               amount: blankingAmount
-            }).draw();
+            }).draw(options);
 
             lastMoveCommand = command;
             prevX = command.x;
@@ -257,7 +257,7 @@ export class Path extends Shape {
             color: [lastPoint.r, lastPoint.g, lastPoint.b],
             amount: Math.floor(waitAmount * relativeAngle)
           });
-          wait = waitShape.draw();
+          wait = waitShape.draw(options);
         }
 
         return [...accumulator, ...wait, ...commandPoints];
