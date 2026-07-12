@@ -14,41 +14,63 @@ app.use(express.static(path.join(__dirname, '/public')));
 const wss = new WebSocketServer({ server });
 
 server.on('request', app);
-server.listen(PORT, function() {
+server.listen(PORT, function () {
   console.log(`Started Calibration Interface on http://localhost:${PORT}`);
 });
 
-wss.on('connection', function connection(ws, req) {
-  const id = req.url!.replace('/?id=', '');
+function broadcast(type: string, data: any) {
+  const message = JSON.stringify({ type, data });
+  wss.clients.forEach((client) => {
+    client.send(message, () => {
+      // Ignore errors for now.
+    });
+  });
+}
 
+wss.on('connection', function connection(ws) {
   function send(type: string, data: any) {
     ws.send(JSON.stringify({ type, data }));
   }
 
-  function sendSettings() {
-    send("SettingsToClient", renderer.getParams());
-  }
-
-  function sendStats() {
-    send("stats", renderer.getStats());
-  };
-
-  const statsInterval = setInterval(sendStats, 300);
-  sendSettings();
-  sendStats();
+  const statsInterval = setInterval(
+    () => send('stats', renderer.getStats()),
+    300
+  );
+  send('state', renderer.getState());
 
   ws.on('message', function incoming(message) {
-    // TODO: should handle illegal JSON so the server can't crash...
-    const payload = JSON.parse(message as string);
-    if (payload.type === 'UPDATEPARAMS') {
-      console.log('Updating Parameters', payload.data);
-      renderer.updateParams(payload.data);
-    } else {
-      console.log('Unknown websocket message', payload);
+    let payload;
+    try {
+      payload = JSON.parse(message as string);
+    } catch (e) {
+      console.error('Illegal JSON from client', message);
+      return;
     }
+
+    switch (payload.type) {
+      case 'setSettings':
+        console.log('Updating settings', payload.data);
+        renderer.updateSettings(payload.data);
+        break;
+      case 'setPattern':
+        console.log('Selecting pattern', payload.data);
+        renderer.selectPattern(payload.data.patternId);
+        break;
+      case 'setPatternParams':
+        renderer.updatePatternParams(
+          payload.data.patternId,
+          payload.data.values
+        );
+        break;
+      default:
+        console.log('Unknown websocket message', payload);
+        return;
+    }
+    // Keep every client's expected view and controls in sync.
+    broadcast('state', renderer.getState());
   });
 
-  ws.on('close', function incoming(message) {
+  ws.on('close', function () {
     clearInterval(statsInterval);
   });
 });

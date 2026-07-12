@@ -1,19 +1,144 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>Laser Calibration</title>
-        <style>
-        </style>
-    </head>
-    <body>
-        <form id="calibration-form">
-          <label>PPS: <input id="pps" type="number" min="7" max="65535" value="" step="100"></label><br>
-          <label>Resolution: <input id="resolution" type="number" value="70"></label><br>
-          <label>Blanking Points: <input id="blankingPoints" type="number" min="0" max="100" value="24"></label><br>
-          <label>Max Wait Points: <input id="maxWaitPoints" type="number" min="0" max="50" value="10"></label><br>
-
-        </form>
-        <pre id="stats-table"></pre>
-        <script src="./index.js" type="module"></script>
-    </body>
+  <head>
+    <title>Laser Calibration</title>
+    <style>
+      body {
+        background: #111;
+        color: #eee;
+        font-family: sans-serif;
+        margin: 0;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #999;
+        margin: 16px 0 6px;
+      }
+      #layout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      #controls {
+        flex: 0 0 340px;
+      }
+      .panel {
+        background: #000;
+        border: 2px solid #333;
+      }
+      #pattern-select {
+        width: 100%;
+        font-size: 15px;
+        padding: 4px;
+        background: #222;
+        color: #eee;
+        border: 1px solid #444;
+      }
+      #pattern-description {
+        font-size: 13px;
+        line-height: 1.45;
+        color: #bbb;
+        margin: 8px 0;
+      }
+      .param-row {
+        display: grid;
+        grid-template-columns: 130px 1fr 70px;
+        gap: 8px;
+        align-items: center;
+        margin: 4px 0;
+        font-size: 13px;
+      }
+      .param-row input[type='number'] {
+        width: 100%;
+        background: #222;
+        color: #eee;
+        border: 1px solid #444;
+        padding: 2px 4px;
+        box-sizing: border-box;
+      }
+      .param-row input[type='range'] {
+        width: 100%;
+      }
+      .checkbox-row {
+        font-size: 13px;
+        margin: 6px 0;
+      }
+      .view {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .view-title {
+        font-size: 13px;
+        color: #999;
+      }
+      #expected-canvas {
+        width: 480px;
+        height: 480px;
+      }
+      #simulator-frame {
+        width: 480px;
+        height: 480px;
+        border: none;
+        display: block;
+      }
+      #stats-table {
+        font-size: 11px;
+        color: #8c8;
+        max-height: 320px;
+        overflow: auto;
+      }
+      details summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: #999;
+      }
+      a {
+        color: #8cf;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Laser Calibration</h1>
+    <div id="layout">
+      <div id="controls">
+        <h2>Test Pattern</h2>
+        <select id="pattern-select"></select>
+        <p id="pattern-description"></p>
+        <div id="pattern-params"></div>
+        <h2>Device Settings</h2>
+        <div id="global-params"></div>
+        <label class="checkbox-row">
+          <input id="monochrome" type="checkbox" />
+          Monochrome laser (all channels = brightest)
+        </label>
+        <details open>
+          <summary>Stats</summary>
+          <pre id="stats-table"></pre>
+        </details>
+      </div>
+      <div class="view">
+        <span class="view-title">
+          Expected — what the projector is supposed to show
+        </span>
+        <canvas id="expected-canvas" class="panel"></canvas>
+      </div>
+      <div class="view">
+        <span class="view-title">
+          Simulated point stream —
+          <a id="simulator-link" href="#" target="_blank">open full size</a>
+        </span>
+        <iframe id="simulator-frame" class="panel"></iframe>
+      </div>
+    </div>
+    <script src="./index.js" type="module"></script>
+  </body>
 </html>

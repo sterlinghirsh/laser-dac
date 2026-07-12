@@ -1,93 +1,124 @@
 import { DAC } from '@laser-dac/core';
 import { getDevices } from '@laser-dac/device-selector';
-import { Circle, Scene, Rect, loadIldaFile, Ilda } from '@laser-dac/draw';
-import * as path from 'path';
+import { Scene } from '@laser-dac/draw';
+import {
+  defaultParamValues,
+  getPattern,
+  ParamValues,
+  Pattern,
+  patterns,
+} from './patterns';
 
-interface IClient {
-  x: number;
-  y: number;
-  id: string;
+export interface Settings {
+  pps: number;
+  resolution: number;
+  blankingPoints: number;
+  maxWaitPoints: number;
+  colorShift: number;
+  monochrome: boolean;
 }
 
 export class Renderer {
-  pps = 25000;
-  resolution = 70;
-  blankingPoints = 24;
-  maxWaitPoints = 10;
+  settings: Settings = {
+    pps: 20000,
+    resolution: 70,
+    blankingPoints: 24,
+    maxWaitPoints: 10,
+    colorShift: 0,
+    monochrome: false,
+  };
+
+  patternId: string = patterns[0].id;
+  // Remember each pattern's params so switching back and forth keeps them.
+  patternParams: Record<string, ParamValues> = {};
 
   dac: DAC;
   scene: Scene;
 
   constructor() {
-    this.dac = new DAC();
+    for (const pattern of patterns) {
+      this.patternParams[pattern.id] = defaultParamValues(pattern);
+    }
 
+    this.dac = new DAC();
     this.scene = new Scene({
-      resolution: this.resolution,
-      blankingPoints: this.blankingPoints,
-      maxWaitPoints: this.maxWaitPoints,
+      resolution: this.settings.resolution,
+      blankingPoints: this.settings.blankingPoints,
+      maxWaitPoints: this.settings.maxWaitPoints,
     });
 
     this.start();
+  }
+
+  private get pattern(): Pattern {
+    return getPattern(this.patternId) ?? patterns[0];
   }
 
   getStats() {
     return this.dac.getStats();
   }
 
-  updateParams(data: any) {
-    this.pps = data.pps;
-    this.dac.setPointsRate(this.pps);
-    this.resolution = data.resolution;
-    this.blankingPoints = data.blankingPoints;
-    this.maxWaitPoints = data.maxWaitPoints;
+  updateSettings(data: Partial<Settings>) {
+    Object.assign(this.settings, data);
 
+    this.dac.setPointsRate(this.settings.pps);
+    this.dac.setColorShift(this.settings.colorShift);
+    this.dac.setColorMode(this.settings.monochrome ? 'monochrome' : 'rgb');
     this.scene.setOptions({
-      resolution: this.resolution,
-      blankingPoints: this.blankingPoints,
-      maxWaitPoints: this.maxWaitPoints,
+      resolution: this.settings.resolution,
+      blankingPoints: this.settings.blankingPoints,
+      maxWaitPoints: this.settings.maxWaitPoints,
     });
   }
 
-  getParams() {
+  selectPattern(patternId: string) {
+    if (getPattern(patternId)) {
+      this.patternId = patternId;
+    }
+  }
+
+  updatePatternParams(patternId: string, values: ParamValues) {
+    const pattern = getPattern(patternId);
+    if (!pattern) {
+      return;
+    }
+    for (const param of pattern.params) {
+      const value = values[param.key];
+      if (typeof value === 'number' && !Number.isNaN(value)) {
+        this.patternParams[patternId][param.key] = Math.min(
+          param.max,
+          Math.max(param.min, value)
+        );
+      }
+    }
+  }
+
+  // Everything the client needs to render its controls and expected view.
+  getState() {
     return {
-      pps: this.pps,
-      resolution: this.resolution,
-      blankingPoints: this.blankingPoints,
-      maxWaitPoints: this.maxWaitPoints,
-    }
+      patterns: patterns.map((pattern) => ({
+        id: pattern.id,
+        name: pattern.name,
+        description: pattern.description,
+        params: pattern.params,
+      })),
+      patternId: this.patternId,
+      patternParams: this.patternParams,
+      settings: this.settings,
+      expected: this.pattern.expected(this.patternParams[this.patternId]),
+    };
   }
 
-  removeClient(id: string) {
-    const index = this.activeClients.findIndex(client => client.id === id);
-    if (index >= 0) {
-      this.activeClients.splice(index, 1);
-    }
-  }
-
-  renderTestPattern() {
-    const bounds = new Rect({
-      x: 0,
-      y: 0,
-      width: 1,
-      height: 1,
-      color: [1, 1, 1]
-    });
-    this.scene.add(bounds);
-
-    const circle = new Circle({
-      x: 0.5,
-      y: 0.5,
-      radius: 0.25,
-      color: [1, 1, 1]
-    });
-    this.scene.add(circle);
-  }
+  private renderFrame = () => {
+    this.pattern.render(this.scene, this.patternParams[this.patternId]);
+  };
 
   async start() {
     this.dac.useAll(await getDevices());
+    this.updateSettings({});
     await this.dac.start();
 
-    this.scene.start(this.renderTestPattern.bind(this), 60);
-    this.dac.stream(this.scene, this.pps);
+    this.scene.start(this.renderFrame, 60);
+    this.dac.stream(this.scene, this.settings.pps);
   }
 }
