@@ -8,10 +8,6 @@ import * as http from 'http';
 // When there is no real device, we fake an interval.
 // We've measured how fast the real device streams, which was 4ms.
 const STREAM_INTERVAL = 4;
-// How many points are drawn at the same time.
-// Increasing the number leads to a more stable image with less flickering.
-// Only used for the simulator!
-const REQUESTED_POINTS_COUNT = 500;
 const PORT = 8080;
 
 export class Simulator extends Device {
@@ -53,6 +49,9 @@ export class Simulator extends Device {
 
   stream(scene: Scene, pointsRate?: number) {
     this.stopInterval();
+    if (pointsRate) {
+      this.setPointsRate(pointsRate);
+    }
     const self = this;
     const frameBuffer: Point[] = [];
 
@@ -74,8 +73,20 @@ export class Simulator extends Device {
       }
     }
 
+    // Send however many points the requested pointsRate says should have
+    // elapsed since the last tick, so the preview's flicker/persistence
+    // tracks how fast the real device would actually draw.
+    let lastTickTime = Date.now();
     this.interval = setInterval(() => {
-      innerStream(REQUESTED_POINTS_COUNT, streamPoints => {
+      const now = Date.now();
+      const numpoints = Math.round(
+        ((now - lastTickTime) / 1000) * this.pointsRate
+      );
+      lastTickTime = now;
+      if (!numpoints) {
+        return;
+      }
+      innerStream(numpoints, streamPoints => {
         this.sendPointsToSimulator(streamPoints);
       });
     }, STREAM_INTERVAL);
