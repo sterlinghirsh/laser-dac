@@ -1,5 +1,7 @@
 export { Scene, DynamicScene } from './Scene';
 export { Line } from './Line';
+export { Wait } from './Wait';
+export { Point, Color } from './Point';
 export { Rect } from './Rect';
 export { Circle } from './Circle';
 export { Path } from './Path';
