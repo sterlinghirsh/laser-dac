@@ -2,32 +2,38 @@ import { ColorMode, Device } from '@laser-dac/core';
 
 import { Simulator } from '@laser-dac/simulator';
 
-import { Beyond } from '@laser-dac/beyond';
-import { Easylase } from '@laser-dac/easylase';
-import { EtherDream } from '@laser-dac/ether-dream';
-import { Helios } from '@laser-dac/helios';
-import { Laserdock } from '@laser-dac/laserdock';
-
-const apis: Record<string, {new (): Device}> = {
-  helios: Helios,
-  laserdock: Laserdock,
-  beyond: Beyond,
-  easylase: Easylase,
-  'ether-dream': EtherDream // This one is a bit slower to check.
+// Device drivers are loaded lazily: most need native bindings (ffi-napi)
+// that don't build on every Node version, and a missing driver shouldn't
+// prevent simulator-only use.
+const apis: Record<string, () => { new (): Device }> = {
+  helios: () => require('@laser-dac/helios').Helios,
+  laserdock: () => require('@laser-dac/laserdock').Laserdock,
+  beyond: () => require('@laser-dac/beyond').Beyond,
+  easylase: () => require('@laser-dac/easylase').Easylase,
+  'ether-dream': () => require('@laser-dac/ether-dream').EtherDream, // This one is a bit slower to check.
 };
 
+function createDevice(api: string): Device | null {
+  try {
+    return new (apis[api]())();
+  } catch (e) {
+    console.error(`Could not load the ${api} driver: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 // Get the first DAC that works.
-export async function autoSelect(): Promise<Device|null> {
-  console.log("Searching for DAC in " + Object.keys(apis).join(', '));
+export async function autoSelect(): Promise<Device | null> {
+  console.log('Searching for DAC in ' + Object.keys(apis).join(', '));
   for (const api in apis) {
-    const dac = new apis[api]();
-    if (await dac.start()) {
-      console.log("Auto Selected DAC " + api);
+    const dac = createDevice(api);
+    if (dac && (await dac.start())) {
+      console.log('Auto Selected DAC ' + api);
       await dac.stop();
       return dac;
     }
   }
-  console.log("No DAC found");
+  console.log('No DAC found');
   return null;
 }
 
@@ -39,7 +45,10 @@ export async function getDevices(): Promise<Device[]> {
 
   if (requestedDevice) {
     if (requestedDevice in apis) {
-      devices.push(new apis[requestedDevice]());
+      const device = createDevice(requestedDevice);
+      if (device) {
+        devices.push(device);
+      }
     } else {
       const autoSelected = await autoSelect();
       if (autoSelected) {
