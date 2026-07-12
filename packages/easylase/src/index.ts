@@ -65,7 +65,7 @@ export class Easylase extends Device {
       if (ready !== 1) {
         return;
       }
-      const points = scene.points.map(this.convertPoint);
+      const points = this.transformPoints(scene.points).map(this.convertPoint);
       easylaseLib.writeFrame(
         this.deviceHandle,
         points,

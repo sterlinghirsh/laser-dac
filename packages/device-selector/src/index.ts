@@ -1,4 +1,4 @@
-import { Device } from '@laser-dac/core';
+import { ColorMode, Device } from '@laser-dac/core';
 
 import { Simulator } from '@laser-dac/simulator';
 
@@ -45,6 +45,17 @@ export async function getDevices(): Promise<Device[]> {
       if (autoSelected) {
         devices.push(autoSelected);
       }
+    }
+  }
+
+  // COLOR_MODE=monochrome makes every device (including the simulator, so the
+  // preview matches) render as a single-color projector would.
+  const colorMode = process.env.COLOR_MODE;
+  if (colorMode) {
+    if (colorMode === 'rgb' || colorMode === 'monochrome') {
+      devices.forEach((device) => device.setColorMode(colorMode as ColorMode));
+    } else {
+      console.error(`Unknown COLOR_MODE "${colorMode}", expected rgb or monochrome`);
     }
   }
 

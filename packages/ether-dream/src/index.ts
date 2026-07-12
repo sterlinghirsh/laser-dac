@@ -142,7 +142,7 @@ export class EtherDream extends Device {
       );
     }
     this.connection.streamFrames(pointsRate, callback => {
-      const points = scene.points.map(this.convertPoint);
+      const points = this.transformPoints(scene.points).map(this.convertPoint);
       callback(points);
     });
   }

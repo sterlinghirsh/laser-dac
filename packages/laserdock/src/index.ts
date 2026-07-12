@@ -49,7 +49,9 @@ export class Laserdock extends Device {
     const callback = () => {
       const len = scene.points.length;
       this.interval = setTimeout(callback, (len / pointsRate) * 1000);
-      const points = scene.points.map(this.convertPoint).splice(0, MAX_POINTS);
+      const points = this.transformPoints(scene.points)
+        .map(this.convertPoint)
+        .splice(0, MAX_POINTS);
       laserdockLib.sendSamples(points, len);
     };
     this.interval = setTimeout(callback, 0);

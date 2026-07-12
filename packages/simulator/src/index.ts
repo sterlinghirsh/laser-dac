@@ -57,7 +57,7 @@ export class Simulator extends Device {
       pointcallback: (points: Point[]) => void
     ) {
       if (frameBuffer.length < numpoints) {
-        const points = scene.points;
+        const points = self.transformPoints(scene.points);
         for (let i = 0; i < points.length; i++) {
           frameBuffer.push(points[i]);
         }

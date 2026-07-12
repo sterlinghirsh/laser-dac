@@ -15,8 +15,13 @@ export interface Scene {
   points: Point[];
 }
 
+// 'monochrome' is for projectors with a single-color laser: every channel is
+// set to the brightest requested channel so shapes of any color stay visible.
+export type ColorMode = 'rgb' | 'monochrome';
+
 export abstract class Device {
   protected pointsRate: number = 30000;
+  protected colorMode: ColorMode = 'rgb';
 
   abstract start(): Promise<boolean>;
   abstract stop(): void;
@@ -42,6 +47,32 @@ export abstract class Device {
 
   getPointsRate(): number {
     return this.pointsRate;
+  }
+
+  setColorMode(colorMode: ColorMode) {
+    this.colorMode = colorMode;
+  }
+
+  getColorMode(): ColorMode {
+    return this.colorMode;
+  }
+
+  // Devices should pass points through this before converting/sending them,
+  // so device-level corrections apply uniformly across all DACs.
+  // Returns new points rather than mutating, because scene points are shared
+  // between devices that may have different settings.
+  protected transformPoints(points: Point[]): Point[] {
+    return this.applyColorMode(points);
+  }
+
+  private applyColorMode(points: Point[]): Point[] {
+    if (this.colorMode === 'rgb') {
+      return points;
+    }
+    return points.map((p) => {
+      const value = Math.max(p.r, p.g, p.b);
+      return { ...p, r: value, g: value, b: value };
+    });
   }
 
   getStats(): Object {
@@ -104,8 +135,12 @@ export class DAC {
     this.devices.forEach((device) => device.setPointsRate(pointsRate));
   }
 
+  setColorMode(colorMode: ColorMode) {
+    this.devices.forEach((device) => device.setColorMode(colorMode));
+  }
+
   getStats(): Object {
-    const allDeviceStats = this.devices.reduce((stats, device) => {
+    const allDeviceStats = this.devices.reduce((stats: Record<string, Object>, device) => {
       const deviceStats = device.getStats();
       if (deviceStats) {
         stats[device.constructor.name] = deviceStats;

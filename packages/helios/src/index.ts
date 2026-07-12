@@ -182,7 +182,7 @@ export class Helios extends Device {
     this.stats.startTime = Date.now();
 
     this.interval = setInterval(() => {
-      const points = scene.getPoints(MAX_POINTS);
+      const points = this.transformPoints(scene.getPoints(MAX_POINTS));
       const result = this.sendFrame(points, this.pointsRate);
 
       this.stats.lastFrame.points = points.length;
@@ -313,7 +313,7 @@ export class Helios extends Device {
 
     const streamSingle = () => {
       const funcStart = Date.now();
-      const points = scene.getPoints(MAX_POINTS);
+      const points = this.transformPoints(scene.getPoints(MAX_POINTS));
       const maxTries = 100;
       let notReadyRetries = 0;
       let result;

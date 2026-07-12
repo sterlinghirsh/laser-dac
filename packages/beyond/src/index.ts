@@ -62,7 +62,7 @@ export class Beyond extends Device {
       if (!scene.points.length) {
         return;
       }
-      const points = scene.points.map(this.convertPoint);
+      const points = this.transformPoints(scene.points).map(this.convertPoint);
       beyondLib.ldbSendFrameToImage(
         ZONE_NAME,
         points.length,
