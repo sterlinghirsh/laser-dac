@@ -34,6 +34,10 @@ export class Simulator extends Device {
     });
   }
 
+  // The simulated projector has no scanner lag, so color-shift latency
+  // compensation meant for real hardware would just misalign the preview.
+  setColorShift() {}
+
   stop() {
     if (this.server) {
       this.server.close();

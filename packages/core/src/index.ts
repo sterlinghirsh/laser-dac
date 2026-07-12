@@ -22,6 +22,10 @@ export type ColorMode = 'rgb' | 'monochrome';
 export abstract class Device {
   protected pointsRate: number = 30000;
   protected colorMode: ColorMode = 'rgb';
+  // How many points to delay r/g/b relative to x/y, compensating for the
+  // scanner mirrors lagging behind the (near-instant) laser on/off response.
+  // May be fractional (colors are interpolated) or negative.
+  protected colorShift: number = 0;
 
   abstract start(): Promise<boolean>;
   abstract stop(): void;
@@ -57,12 +61,20 @@ export abstract class Device {
     return this.colorMode;
   }
 
+  setColorShift(colorShift: number) {
+    this.colorShift = colorShift;
+  }
+
+  getColorShift(): number {
+    return this.colorShift;
+  }
+
   // Devices should pass points through this before converting/sending them,
   // so device-level corrections apply uniformly across all DACs.
   // Returns new points rather than mutating, because scene points are shared
   // between devices that may have different settings.
   protected transformPoints(points: Point[]): Point[] {
-    return this.applyColorMode(points);
+    return this.applyColorShift(this.applyColorMode(points));
   }
 
   private applyColorMode(points: Point[]): Point[] {
@@ -72,6 +84,30 @@ export abstract class Device {
     return points.map((p) => {
       const value = Math.max(p.r, p.g, p.b);
       return { ...p, r: value, g: value, b: value };
+    });
+  }
+
+  // Each point keeps its x/y but takes the color from `colorShift` points
+  // earlier in the stream, interpolated for fractional shifts. Wraps around
+  // the given chunk, which assumes the chunk is one full repeating frame --
+  // close enough at the edges since frames start and end with blanking.
+  private applyColorShift(points: Point[]): Point[] {
+    const shift = this.colorShift;
+    const len = points.length;
+    if (!shift || len < 2) {
+      return points;
+    }
+    return points.map((p, i) => {
+      const src = (((i - shift) % len) + len) % len;
+      const before = points[Math.floor(src)];
+      const after = points[(Math.floor(src) + 1) % len];
+      const frac = src - Math.floor(src);
+      return {
+        ...p,
+        r: before.r + (after.r - before.r) * frac,
+        g: before.g + (after.g - before.g) * frac,
+        b: before.b + (after.b - before.b) * frac,
+      };
     });
   }
 
@@ -137,6 +173,10 @@ export class DAC {
 
   setColorMode(colorMode: ColorMode) {
     this.devices.forEach((device) => device.setColorMode(colorMode));
+  }
+
+  setColorShift(colorShift: number) {
+    this.devices.forEach((device) => device.setColorShift(colorShift));
   }
 
   getStats(): Object {
