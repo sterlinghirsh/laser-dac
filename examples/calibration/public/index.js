@@ -14,7 +14,7 @@ const simulatorFrame = document.getElementById('simulator-frame');
 const simulatorLink = document.getElementById('simulator-link');
 
 const simulatorUrl = `http://${host}:8080`;
-simulatorFrame.src = simulatorUrl;
+simulatorFrame.src = `${simulatorUrl}?embed`;
 simulatorLink.href = simulatorUrl;
 
 // Device-level settings are defined here; pattern params come from the server.

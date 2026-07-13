@@ -25,6 +25,11 @@ gui.add(options, 'xyResolution', 0, 1);
 gui.add(options, 'numberOfPoints').listen();
 gui.add(options, 'totalPoints').listen();
 gui.width = 300;
+// When embedded (e.g. the calibration tool's iframe) start with the
+// controls collapsed so they don't cover the small view.
+if (new URLSearchParams(window.location.search).has('embed')) {
+  gui.close();
+}
 
 let points = [];
 const canvas = document.getElementById('canvas');
