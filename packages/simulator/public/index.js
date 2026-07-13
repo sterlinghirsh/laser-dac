@@ -15,7 +15,10 @@ class SimulatorOptions {
 }
 
 const options = new SimulatorOptions();
-var gui = new dat.GUI();
+// When embedded (e.g. the calibration tool's iframe) the controls dock
+// below the canvas instead of overlaying it.
+const embedded = new URLSearchParams(window.location.search).has('embed');
+var gui = new dat.GUI({ autoPlace: !embedded });
 gui.add(options, 'positionDelay', 0, 10).step(1);
 gui.add(options, 'afterglowAmount', 0, 300);
 gui.add(options, 'showBlanking');
@@ -25,10 +28,9 @@ gui.add(options, 'xyResolution', 0, 1);
 gui.add(options, 'numberOfPoints').listen();
 gui.add(options, 'totalPoints').listen();
 gui.width = 300;
-// When embedded (e.g. the calibration tool's iframe) start with the
-// controls collapsed so they don't cover the small view.
-if (new URLSearchParams(window.location.search).has('embed')) {
-  gui.close();
+if (embedded) {
+  document.body.classList.add('embed');
+  document.getElementById('gui-container').appendChild(gui.domElement);
 }
 
 let points = [];
