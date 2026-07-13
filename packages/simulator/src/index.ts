@@ -76,12 +76,15 @@ export class Simulator extends Device {
     // Send however many points the requested pointsRate says should have
     // elapsed since the last tick, so the preview's flicker/persistence
     // tracks how fast the real device would actually draw.
+    // Cap the elapsed time: after a stall (system sleep, blocked event
+    // loop) drawing the backlog is meaningless for a live preview, and an
+    // unbounded request makes the refill loop below spin forever.
+    const MAX_TICK_MS = 100;
     let lastTickTime = Date.now();
     this.interval = setInterval(() => {
       const now = Date.now();
-      const numpoints = Math.round(
-        ((now - lastTickTime) / 1000) * this.pointsRate
-      );
+      const elapsedMs = Math.min(now - lastTickTime, MAX_TICK_MS);
+      const numpoints = Math.round((elapsedMs / 1000) * this.pointsRate);
       lastTickTime = now;
       if (!numpoints) {
         return;
